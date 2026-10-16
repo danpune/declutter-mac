@@ -149,6 +149,10 @@ final class DeClutter: NSObject, NSApplicationDelegate {
             defaults.bool(forKey: "showInDock") ? .on : .off
         menu.addItem(withTitle: "Open at Login", action: #selector(toggleLogin), keyEquivalent: "").state =
             SMAppService.mainApp.status == .enabled ? .on : .off
+        menu.addItem(.separator())
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"
+        menu.addItem(withTitle: "Version \(version) · What's New", action: #selector(openReleases), keyEquivalent: "").toolTip =
+            "Every version and what changed, newest first. DeClutter doesn't update itself, so get newer versions here."
         menu.items.forEach { $0.target = self }
         return menu
     }
@@ -292,6 +296,10 @@ final class DeClutter: NSObject, NSApplicationDelegate {
             }
         }
         defaults.removeObject(forKey: "quitApps")
+    }
+
+    @objc func openReleases() {
+        NSWorkspace.shared.open(URL(string: "https://github.com/danpune/declutter-mac/releases")!)
     }
 
     // macOS 26+ has its own menu bar manager: System Settings > Menu Bar > Allow in the Menu Bar.

@@ -41,6 +41,7 @@ into a green ↩︎ arrow.
 | **Change Shortcut…** | Press any combination with ⌘, ⌃ or ⌥. A global shortcut takes that key from every other app, so pick one you don't use elsewhere. |
 | **Animate** | On: windows shrink into the Dock (needs the Accessibility permission). Off: apps hide instantly, no permission needed. |
 | **Show in Dock**, **Open at Login** | On by default. The Dock icon is handy on MacBooks whose notch hides some menu bar icons. |
+| **Version · What's New** | Which version you have. Click it for every version and what changed; DeClutter doesn't update itself, so newer versions are downloaded from there. |
 
 Quitting DeClutter while the screen is clear brings everything back first, so nothing is ever left stranded.
 

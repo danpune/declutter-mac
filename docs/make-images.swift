@@ -284,7 +284,8 @@ let menuItems: [(String, String, Bool)] = [   // title, shortcut, ticked; "-" is
     ("Declutter", "⌃⌥D", false), ("Restore Everything", "", false), ("-", "", false),
     ("Quit Menu Bar Apps…", "", false), ("Arrange Menu Bar…", "", false), ("-", "", false),
     ("Never Hide or Quit", "›", false), ("Change Shortcut…", "", false), ("Animate", "", true),
-    ("Show in Dock", "", true), ("Open at Login", "", true), ("-", "", false), ("Quit DeClutter", "⌘Q", false)]
+    ("Show in Dock", "", true), ("Open at Login", "", true), ("-", "", false),
+    ("Version 1.1 · What's New", "", false), ("-", "", false), ("Quit DeClutter", "⌘Q", false)]
 let rowH: CGFloat = 23, sepH: CGFloat = 11, menuW: CGFloat = 250
 let menuH = menuItems.reduce(CGFloat(12)) { $0 + ($1.0 == "-" ? sepH : rowH) }
 let menuSize = CGSize(width: menuW + 60, height: menuH + 60)

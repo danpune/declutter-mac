@@ -7,7 +7,8 @@ set -euo pipefail
 cd "${0:A:h}"
 
 NAME="DeClutter"
-VERSION="1.0"
+VERSION="1.1"
+BUILD_NUMBER="2"
 MIN_OS="14.0"
 APP="build/$NAME.app"
 
@@ -34,7 +35,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>CFBundleIconFile</key><string>AppIcon</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleShortVersionString</key><string>$VERSION</string>
-  <key>CFBundleVersion</key><string>1</string>
+  <key>CFBundleVersion</key><string>$BUILD_NUMBER</string>
   <key>LSMinimumSystemVersion</key><string>$MIN_OS</string>
   <key>LSApplicationCategoryType</key><string>public.app-category.productivity</string>
   <key>LSUIElement</key><true/>
