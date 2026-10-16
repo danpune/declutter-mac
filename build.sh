@@ -7,8 +7,8 @@ set -euo pipefail
 cd "${0:A:h}"
 
 NAME="DeClutter"
-VERSION="1.1"
-BUILD_NUMBER="2"
+VERSION="1.2"
+BUILD_NUMBER="3"
 MIN_OS="14.0"
 APP="build/$NAME.app"
 
@@ -68,7 +68,9 @@ codesign --force --keychain $KEYCHAIN --sign "$IDENTITY" "$APP"
 echo "Built $APP"
 
 if [[ "${1:-}" == "release" ]]; then
-  ditto -c -k --keepParent "$APP" build/DeClutter-mac.zip
+  # No resource forks or extended attributes: as ._ files in the zip they break the signature for anyone who unzips
+  # with `unzip` instead of Finder.
+  ditto -c -k --norsrc --noextattr --keepParent "$APP" build/DeClutter-mac.zip
   shasum -a 256 build/DeClutter-mac.zip
 fi
 

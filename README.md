@@ -29,16 +29,16 @@ into a green ↩︎ arrow.
 
 **Right-click** either icon for the menu:
 
-<p align="center"><img src="docs/menu.png" width="310" alt="DeClutter's menu: Declutter (Control-Option-D), Restore Everything, Quit Menu Bar Apps, Arrange Menu Bar, Never Hide or Quit, Change Shortcut, Animate, Show in Dock, Open at Login, Quit DeClutter"></p>
+<p align="center"><img src="docs/menu.png" width="310" alt="DeClutter's menu: Declutter (Control-Option-D), Restore Everything, Quit Menu Bar Apps, Arrange Menu Bar, Never Hide or Quit, Change Shortcut, Animate, Show in Dock, Open at Login, Version and What's New, Quit DeClutter"></p>
 
-| | |
+| Menu item | What it does |
 |---|---|
 | **Declutter** / **Restore Apps** | Same as clicking the icon. |
 | **Restore Everything** | Brings back every hidden app and every minimized window, including ones you put away yourself. |
 | **Quit Menu Bar Apps…** | Quits the menu bar utilities (apps with no Dock icon), after showing you the list. **Reopen Menu Bar Apps** brings them back. |
-| **Arrange Menu Bar…** | Opens macOS's own menu bar settings, to hide other apps' icons. To reorder icons, hold ⌘ and drag them. |
+| **Arrange Menu Bar…** | Opens macOS's own menu bar settings. On macOS 26 or later that's where you hide other apps' icons; earlier versions only cover Apple's. To reorder icons, hold ⌘ and drag them. |
 | **Never Hide or Quit** | Tick apps to leave alone, such as music, a video call or a dictation tool. |
-| **Change Shortcut…** | Press any combination with ⌘, ⌃ or ⌥. A global shortcut takes that key from every other app, so pick one you don't use elsewhere. |
+| **Change Shortcut…** | Press any combination with ⌘, ⌃ or ⌥. A global shortcut takes that key from every other app, so pick one you don't use elsewhere. macOS's own shortcuts (like ⌘Space) and ones every app needs (like ⌘C or ⌘Q) are refused. |
 | **Animate** | On: windows shrink into the Dock (needs the Accessibility permission). Off: apps hide instantly, no permission needed. |
 | **Show in Dock**, **Open at Login** | On by default. The Dock icon is handy on MacBooks whose notch hides some menu bar icons. |
 | **Version · What's New** | Which version you have. Click it for every version and what changed; DeClutter doesn't update itself, so newer versions are downloaded from there. |

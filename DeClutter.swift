@@ -22,11 +22,14 @@ final class DeClutter: NSObject, NSApplicationDelegate {
     var frontBeforeDeclutter: NSRunningApplication?
     var minimized: [AXUIElement] = []   // windows DeClutter minimized (Animate on), un-minimized on Restore
     var generation = 0                  // bumped by Restore, so a pending hide from an unfinished declutter is dropped
+    var clearing = false                // windows are on their way to the Dock but the apps aren't hidden yet
     var askedForAccessibility = false
     let defaults = UserDefaults.standard
 
+    // `clearing` covers the 0.6 s before the apps hide, when macOS may not report the windows as minimized yet: a second
+    // press then restores instead of decluttering again and losing track of the first windows.
     var isDecluttered: Bool {
-        hidden.contains { $0.isHidden && !$0.isTerminated } || minimized.contains(where: isMinimized)
+        clearing || hidden.contains { $0.isHidden && !$0.isTerminated } || minimized.contains(where: isMinimized)
     }
     var regularApps: [NSRunningApplication] {
         NSWorkspace.shared.runningApplications.filter { $0.activationPolicy == .regular && $0 != NSRunningApplication.current }
@@ -70,6 +73,15 @@ final class DeClutter: NSObject, NSApplicationDelegate {
             if let app, app.activationPolicy == .regular, app != NSRunningApplication.current { self?.lastFront = app }
             self?.updateIcon()
         }
+        // An app only reports itself hidden a moment after hide(), so the icon follows these instead.
+        for name in [NSWorkspace.didHideApplicationNotification, NSWorkspace.didUnhideApplicationNotification,
+                     NSWorkspace.didTerminateApplicationNotification] {
+            NSWorkspace.shared.notificationCenter.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                self?.updateIcon()
+            }
+        }
+        // One frozen app can stall any Accessibility call; this caps every one of them (Finder un-minimizes in ~1.5 s).
+        AXUIElementSetMessagingTimeout(AXUIElementCreateSystemWide(), 2)
 
         // Open at login once, so the shortcut still works after a restart. The menu or System Settings turns it off.
         if !defaults.bool(forKey: "loginSetUp") {
@@ -92,9 +104,10 @@ final class DeClutter: NSObject, NSApplicationDelegate {
     }
     let terminationSignal = DispatchSource.makeSignalSource(signal: SIGTERM, queue: .main)
 
-    // Quitting never leaves apps stranded.
+    // Quitting never leaves apps stranded. Waits for the windows to leave the Dock: the process would otherwise exit
+    // before the background un-minimize runs.
     func applicationWillTerminate(_ note: Notification) {
-        if isDecluttered { restore(hidden) }
+        if isDecluttered { _ = restore(hidden).wait(timeout: .now() + 3) }
     }
 
     // Clicking the Dock icon (or `open -a DeClutter`, e.g. from Spotlight or Raycast) toggles too.
@@ -106,7 +119,8 @@ final class DeClutter: NSObject, NSApplicationDelegate {
     func applicationDockMenu(_ sender: NSApplication) -> NSMenu? { makeMenu() }
 
     @objc func statusClicked() {
-        guard NSApp.currentEvent?.type == .rightMouseUp else { return toggle() }
+        let event = NSApp.currentEvent   // Control-click is the Mac's other right-click
+        guard event?.type == .rightMouseUp || event?.modifierFlags.contains(.control) == true else { return toggle() }
         let menu = makeMenu()
         menu.addItem(.separator())
         menu.addItem(withTitle: "Quit DeClutter", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
@@ -128,7 +142,7 @@ final class DeClutter: NSObject, NSApplicationDelegate {
             menu.addItem(withTitle: "Reopen Menu Bar Apps", action: #selector(reopenMenuBarApps), keyEquivalent: "")
         }
         menu.addItem(withTitle: "Arrange Menu Bar…", action: #selector(openMenuBarSettings), keyEquivalent: "").toolTip =
-            "macOS settings to hide icons. To reorder them, hold ⌘ and drag them in the menu bar."
+            "macOS settings to hide icons (other apps' icons on macOS 26 or later). To reorder them, hold ⌘ and drag them in the menu bar."
         menu.addItem(.separator())
         let keepMenu = NSMenu()
         var seen = Set<String>()
@@ -158,7 +172,7 @@ final class DeClutter: NSObject, NSApplicationDelegate {
     }
 
     @objc func toggle() {
-        guard !isDecluttered else { return restore(hidden) }
+        guard !isDecluttered else { restore(hidden); return }
         // Right after launch no switch has been seen yet; then the app in front now (shortcut or menu bar) is the one.
         frontBeforeDeclutter = lastFront ?? NSWorkspace.shared.frontmostApplication.flatMap {
             $0.activationPolicy == .regular && $0 != NSRunningApplication.current ? $0 : nil
@@ -174,9 +188,11 @@ final class DeClutter: NSObject, NSApplicationDelegate {
         // its minimize animations one after another: minimizing every window left a ~3 s trickle (Finder, 6 windows).
         minimized = hidden.compactMap { windows(of: $0).first { isStandard($0) && !isMinimized($0) } }
         minimized.forEach { setMinimized($0, true) }
+        clearing = true
         let current = generation
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [self] in
             guard current == generation else { return }
+            clearing = false
             hidden.forEach { $0.hide() }
             updateIcon()
         }
@@ -190,32 +206,37 @@ final class DeClutter: NSObject, NSApplicationDelegate {
     }
 
     // Un-minimizing can block until the app finishes its animation (1.5 s in Finder), so each app gets its own queue:
-    // one slow app no longer holds up the others, and DeClutter stays responsive.
-    func unminimize(_ windows: [AXUIElement]) {
+    // one slow app no longer holds up the others, and DeClutter stays responsive. The group finishes when all are done.
+    @discardableResult func unminimize(_ windows: [AXUIElement]) -> DispatchGroup {
+        let done = DispatchGroup()
         let byApp = Dictionary(grouping: windows) { window -> pid_t in
             var pid: pid_t = 0
             AXUIElementGetPid(window, &pid)
             return pid
         }
         for group in byApp.values {
-            DispatchQueue.global(qos: .userInteractive).async {
+            DispatchQueue.global(qos: .userInteractive).async(group: done) {
                 group.forEach { AXUIElementSetAttributeValue($0, kAXMinimizedAttribute as CFString, kCFBooleanFalse) }
             }
         }
+        return done
     }
 
-    func restore(_ apps: [NSRunningApplication]) {
+    @discardableResult func restore(_ apps: [NSRunningApplication]) -> DispatchGroup {
         generation += 1
+        clearing = false
         // macOS only lets the active app hand focus to another, so take it first. It must come before unhide(): that
         // request is asynchronous, and activating right after it left every app hidden.
         NSApp.activate()
         apps.forEach { $0.unhide() }
-        unminimize(minimized)
+        let done = unminimize(minimized)
         minimized = []
-        (frontBeforeDeclutter ?? lastFront)?.activate()   // lastFront when nothing was decluttered (Restore Everything)
+        // lastFront when nothing was decluttered (Restore Everything), or when the app the person was in has quit since.
+        [frontBeforeDeclutter, lastFront].compactMap { $0 }.first { !$0.isTerminated }?.activate()
         frontBeforeDeclutter = nil
         hidden = []
         updateIcon()
+        return done
     }
 
     // Minimizing other apps' windows needs Accessibility permission. macOS asks at most once per launch; until it's
@@ -227,7 +248,7 @@ final class DeClutter: NSObject, NSApplicationDelegate {
 
     func windows(of app: NSRunningApplication) -> [AXUIElement] {
         let element = AXUIElementCreateApplication(app.processIdentifier)
-        AXUIElementSetMessagingTimeout(element, 1)   // a frozen app can't stall DeClutter for long
+        AXUIElementSetMessagingTimeout(element, 1)   // tighter than the global 2 s: one frozen app barely delays a declutter
         return attribute(element, kAXWindowsAttribute) as? [AXUIElement] ?? []
     }
 
@@ -267,7 +288,7 @@ final class DeClutter: NSObject, NSApplicationDelegate {
     @objc func quitMenuBarApps() {
         let apps = menuBarApps.filter { !isKept($0) }
         NSApp.activate()
-        defer { lastFront?.activate() }   // once the dialog closes, back to the app the person was in
+        defer { returnToLastApp() }
         let alert = NSAlert()
         guard !apps.isEmpty else {
             alert.messageText = "No menu bar apps to quit"
@@ -285,6 +306,12 @@ final class DeClutter: NSObject, NSApplicationDelegate {
         let ids = Set((defaults.stringArray(forKey: "quitApps") ?? []) + apps.compactMap(\.bundleIdentifier))
         defaults.set(Array(ids), forKey: "quitApps")
         apps.forEach { $0.terminate() }
+    }
+
+    // Once a dialog closes, back to the app the person was in, unless the screen is clear: activating a hidden app
+    // would bring it back.
+    func returnToLastApp() {
+        if !isDecluttered { lastFront?.activate() }
     }
 
     @objc func reopenMenuBarApps() {
@@ -315,42 +342,65 @@ final class DeClutter: NSObject, NSApplicationDelegate {
         alert.messageText = "Press your new DeClutter shortcut"
         alert.informativeText = "Hold ⌘, ⌃ or ⌥ (⇧ optional) and press a key. Esc keeps the current shortcut."
         alert.addButton(withTitle: "Cancel")
+        var reserved = false
         let monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [self] event in
             let mods = event.modifierFlags.intersection([.command, .control, .option, .shift])
             if event.keyCode == UInt16(kVK_Escape) {
                 NSApp.abortModal()
             } else if !mods.isDisjoint(with: [.command, .control, .option]), let key = event.charactersIgnoringModifiers?.lowercased() {
-                defaults.set(Int(event.keyCode), forKey: "keyCode")
-                defaults.set(key, forKey: "key")
-                defaults.set(Int(mods.rawValue), forKey: "modifiers")
+                reserved = isReserved(event.keyCode, mods, key)
+                if !reserved {
+                    defaults.set(Int(event.keyCode), forKey: "keyCode")
+                    defaults.set(key, forKey: "key")
+                    defaults.set(Int(mods.rawValue), forKey: "modifiers")
+                }
                 NSApp.stopModal()
             }
             return nil   // swallow every key so Return or Space can't press Cancel by accident
         }
         NSApp.activate()
-        defer { lastFront?.activate() }   // once the dialogs close, back to the app the person was in
+        defer { returnToLastApp() }
         alert.runModal()
         if let monitor { NSEvent.removeMonitor(monitor) }
-        if !registerHotKey() {
+        if reserved || !registerHotKey() {
             defaults.set(old.0, forKey: "keyCode")
             defaults.set(old.1, forKey: "key")
             defaults.set(old.2, forKey: "modifiers")
             registerHotKey()
             let taken = NSAlert()
-            taken.messageText = "Another app already uses that shortcut"
-            taken.informativeText = "DeClutter kept its previous shortcut. Try a different combination."
+            taken.messageText = "That shortcut is already taken"
+            taken.informativeText = "macOS or every app uses it (like ⌘Space or ⌘C). DeClutter kept its previous shortcut; try another combination."
             taken.runModal()
         }
     }
 
-    @discardableResult func registerHotKey() -> Bool {
-        let mods = NSEvent.ModifierFlags(rawValue: UInt(defaults.integer(forKey: "modifiers")))
+    // macOS's own shortcuts (Spotlight, app switching, screenshots…, as set in System Settings > Keyboard) and the ⌘ keys
+    // every app relies on. Registering over them succeeds silently and then breaks them everywhere, so refuse up front.
+    // ponytail: other apps' own in-app shortcuts can't be looked up; the README says to pick one you don't use.
+    func isReserved(_ keyCode: UInt16, _ mods: NSEvent.ModifierFlags, _ key: String) -> Bool {
+        if mods == .command && ["q", "w", "c", "v", "x", "z", "a", "s", "h"].contains(key) { return true }   // quit, close, edit, save, hide
+        if mods == [.command, .shift] && ["z", "q"].contains(key) { return true }   // redo, log out
+        var list: Unmanaged<CFArray>?
+        guard CopySymbolicHotKeys(&list) == noErr, let system = list?.takeRetainedValue() as? [[String: Any]] else { return false }
+        let carbon = carbonModifiers(mods), mask = cmdKey | controlKey | optionKey | shiftKey
+        return system.contains {
+            $0[kHISymbolicHotKeyEnabled as String] as? Bool == true && $0[kHISymbolicHotKeyCode as String] as? Int == Int(keyCode)
+                && ($0[kHISymbolicHotKeyModifiers as String] as? Int ?? 0) & mask == carbon
+        }
+    }
+
+    func carbonModifiers(_ mods: NSEvent.ModifierFlags) -> Int {
         var carbon = 0
         if mods.contains(.command) { carbon |= cmdKey }
         if mods.contains(.control) { carbon |= controlKey }
         if mods.contains(.option) { carbon |= optionKey }
         if mods.contains(.shift) { carbon |= shiftKey }
-        return RegisterEventHotKey(UInt32(defaults.integer(forKey: "keyCode")), UInt32(carbon),
+        return carbon
+    }
+
+    @discardableResult func registerHotKey() -> Bool {
+        let mods = NSEvent.ModifierFlags(rawValue: UInt(defaults.integer(forKey: "modifiers")))
+        return RegisterEventHotKey(UInt32(defaults.integer(forKey: "keyCode")), UInt32(carbonModifiers(mods)),
                                    EventHotKeyID(signature: OSType(0x4443_4C52), id: 1), GetApplicationEventTarget(), 0, &hotKey) == noErr
     }
 
@@ -365,7 +415,10 @@ final class DeClutter: NSObject, NSApplicationDelegate {
 
     @objc func toggleLogin() {
         let login = SMAppService.mainApp
-        try? login.status == .enabled ? login.unregister() : login.register()
+        // Once it's switched off in System Settings > Login Items, only the person can switch it back on, there.
+        guard login.status != .requiresApproval else { return SMAppService.openSystemSettingsLoginItems() }
+        do { try login.status == .enabled ? login.unregister() : login.register() }
+        catch { SMAppService.openSystemSettingsLoginItems() }
     }
 
     func updateIcon() {
