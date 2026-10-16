@@ -7,8 +7,8 @@ set -euo pipefail
 cd "${0:A:h}"
 
 NAME="DeClutter"
-VERSION="1.2"
-BUILD_NUMBER="3"
+VERSION="1.3"
+BUILD_NUMBER="4"
 MIN_OS="14.0"
 APP="build/$NAME.app"
 
@@ -39,6 +39,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>LSMinimumSystemVersion</key><string>$MIN_OS</string>
   <key>LSApplicationCategoryType</key><string>public.app-category.productivity</string>
   <key>LSUIElement</key><true/>
+  <key>NSHumanReadableCopyright</key><string>© 2026 danpune · MIT License</string>
 </dict></plist>
 PLIST
 
@@ -72,6 +73,9 @@ if [[ "${1:-}" == "release" ]]; then
   # with `unzip` instead of Finder.
   ditto -c -k --norsrc --noextattr --keepParent "$APP" build/DeClutter-mac.zip
   shasum -a 256 build/DeClutter-mac.zip
+  # The updater offers a release when its tag, minus the "v", is a newer version, and installs it only when the app
+  # inside says exactly that version. So the tag must be v$VERSION.
+  echo "Publish: gh release create v$VERSION build/DeClutter-mac.zip --repo danpune/declutter-mac"
 fi
 
 if [[ "${1:-}" == "install" ]]; then
