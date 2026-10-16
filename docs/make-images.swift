@@ -206,7 +206,7 @@ func drawFrame(_ f: Frame) -> CGImage {
             let r = iconRect(i)
             if i == apps.count {
                 NSGradient(starting: NSColor(red: 0.30, green: 0.85, blue: 0.45, alpha: 1), ending: NSColor(red: 0.08, green: 0.55, blue: 0.27, alpha: 1))!
-                    .draw(in: NSBezierPath(roundedRect: r, xRadius: 10, yRadius: 10), angle: -90)
+                    .draw(in: NSBezierPath(roundedRect: r, xRadius: 10, yRadius: 10), angle: 90)   // 90, not -90: this context is flipped
                 symbol("macwindow.on.rectangle", in: r.insetBy(dx: 9, dy: 11), color: .white)
             } else {
                 fill(r, apps[i].color, radius: 10)
@@ -316,3 +316,36 @@ let menu = render(menuSize, scale: 2) { ctx in
 let png = NSBitmapImageRep(cgImage: menu).representation(using: .png, properties: [:])!
 try! png.write(to: URL(fileURLWithPath: "docs/menu.png"))
 print("wrote docs/demo.gif (\(frames.count) frames) and docs/menu.png")
+
+// MARK: the link preview (GitHub → Settings → Social preview), shown when the repo link is shared in Messages or WhatsApp
+
+let socialSize = CGSize(width: 1280, height: 640)
+let before = drawFrame(Frame()), after = drawFrame(Frame(progress: 1))
+let social = render(socialSize) { ctx in
+    fill(CGRect(origin: .zero, size: socialSize), NSColor(red: 0.95, green: 0.98, blue: 0.96, alpha: 1))
+    let tile = CGRect(x: 80, y: 96, width: 120, height: 120)
+    NSGradient(starting: NSColor(red: 0.30, green: 0.85, blue: 0.45, alpha: 1), ending: NSColor(red: 0.08, green: 0.55, blue: 0.27, alpha: 1))!
+        .draw(in: NSBezierPath(roundedRect: tile, xRadius: 27, yRadius: 27), angle: 90)   // 90, not -90: this context is flipped
+    symbol("macwindow.on.rectangle", in: tile.insetBy(dx: 24, dy: 30), color: .white)
+    text("DeClutter", at: CGPoint(x: 76, y: 236), size: 84, weight: .bold, color: NSColor(white: 0.1, alpha: 1))
+    text("Too many windows open?", at: CGPoint(x: 80, y: 352), size: 34, weight: .semibold, color: green)
+    text("One click tucks them all into the Dock.", at: CGPoint(x: 80, y: 400), size: 30, color: NSColor(white: 0.3, alpha: 1))
+    text("One more brings them all back.", at: CGPoint(x: 80, y: 440), size: 30, color: NSColor(white: 0.3, alpha: 1))
+    text("Free for Mac", at: CGPoint(x: 80, y: 528), size: 24, weight: .semibold, color: NSColor(white: 0.45, alpha: 1))
+    // Before and after, with an arrow between.
+    for (img, y) in [(before, CGFloat(56)), (after, CGFloat(344))] {
+        let r = CGRect(x: 760, y: y, width: 432, height: 270)
+        ctx.saveGState()
+        ctx.setShadow(offset: CGSize(width: 0, height: -6), blur: 20, color: NSColor(white: 0, alpha: 0.25).cgColor)
+        fill(r, .white, radius: 14)
+        ctx.restoreGState()
+        ctx.saveGState()
+        NSBezierPath(roundedRect: r, xRadius: 14, yRadius: 14).addClip()
+        image(img, in: r, ctx)
+        ctx.restoreGState()
+    }
+    fill(CGRect(x: 948, y: 316, width: 56, height: 40), green, radius: 20)
+    symbol("arrow.down", in: CGRect(x: 960, y: 322, width: 32, height: 28), color: .white, weight: .bold)
+}
+try! NSBitmapImageRep(cgImage: social).representation(using: .png, properties: [:])!.write(to: URL(fileURLWithPath: "docs/social.png"))
+print("wrote docs/social.png")
