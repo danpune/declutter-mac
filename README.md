@@ -1,11 +1,11 @@
-# DeClutter for Mac
+# <img src="docs/icon.png" width="44" alt=""> DeClutter for Mac
 
 Too many apps and browser windows open? One click and every window shrinks into its app's Dock icon, leaving a
 clean desktop. Click again and everything comes back where it was, with you in the app you were using.
 
 Free. No account, no ads, no tracking, and it never uses the internet.
 
-<p align="center"><img src="docs/icon.png" width="160" alt="DeClutter's icon: two white windows on a green tile"></p>
+<p align="center"><img src="docs/demo.gif" width="720" alt="Animation: a Mac desktop crowded with a browser, mail, notes, a chat, a budget sheet and a music player. A click on DeClutter's green menu bar icon shrinks every window into its app's Dock icon, leaving a clean desktop. Pressing the shortcut Control-Option-D brings every window back to where it was."></p>
 
 ## Download
 
@@ -28,6 +28,8 @@ into its app's Dock icon. Do it again to bring everything back. While the screen
 into a green ↩︎ arrow.
 
 **Right-click** either icon for the menu:
+
+<p align="center"><img src="docs/menu.png" width="310" alt="DeClutter's menu: Declutter (Control-Option-D), Restore Everything, Quit Menu Bar Apps, Arrange Menu Bar, Never Hide or Quit, Change Shortcut, Animate, Show in Dock, Open at Login, Quit DeClutter"></p>
 
 | | |
 |---|---|
@@ -56,6 +58,7 @@ Needs only the Xcode Command Line Tools:
 ./build.sh install    # also copies it to /Applications and opens it
 ./build.sh release    # also zips it for GitHub Releases
 ./test.sh             # declutters and restores the installed app, and checks every window came back
+swift docs/make-images.swift   # redraws the pictures in this README (drawn in code, not screenshots)
 ```
 
 The first build creates a signing certificate that exists only on your Mac, in its own keychain under
